@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+.env
+ci/
+deploy/
+logs/
+*.tar.gz
+.DS_Store

@@ -1,0 +1,9 @@
+{
+  "build": [
+    "npm ci",
+    "npm run build"
+  ],
+  "artifact": "dist",
+  "deploy": true,
+  "timeout": 600
+}

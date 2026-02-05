@@ -1,0 +1,3 @@
+#!/bin/bash
+# Wrapper for post-receive.js (Unix/Linux/macOS)
+exec node "$(dirname "$0")/post-receive.js"
