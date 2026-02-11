@@ -48,6 +48,7 @@ Paths are dynamically generated using Node.js `os.tmpdir()` via `orchestrator/sr
 - **Current release**: `<tmpdir>/mini-jenkins/deploy/<repo>/current` → symlink/junction
 
 Where `<tmpdir>` is:
+
 - Linux/macOS: `/tmp/`
 - Windows: `C:\Users\<user>\AppData\Local\Temp\`
 
@@ -56,51 +57,49 @@ Where `<tmpdir>` is:
 ### First-Time Setup
 
 **Linux/macOS:**
+
 ```bash
 # 1. Install dependencies
 cd orchestrator && npm install
 cd ../frontend && npm install
 
-# 2. Start Redis (required for BullMQ)
-redis-server
-
-# 3. Create a repository
+# 2. Create a repository
 ./setup-repo.sh my-app
 
-# 4. Start backend (port 4000)
+# 3. Start backend (port 4000)
 cd orchestrator && npm run dev
 
-# 5. Start frontend (port 3000)
+# 4. Start frontend (port 3000)
 cd frontend && npm run dev
 ```
 
 **Windows:**
+
 ```cmd
 REM 1. Install dependencies
 cd orchestrator && npm install
 cd ..\.\frontend && npm install
 
-REM 2. Start Redis (via WSL or Redis for Windows)
-wsl redis-server
-
-REM 3. Create a repository
+REM 2. Create a repository
 setup-repo.bat my-app
 
-REM 4. Start backend (port 4000)
+REM 3. Start backend (port 4000)
 cd orchestrator && npm run dev
 
-REM 5. Start frontend (port 3000) in new terminal
+REM 4. Start frontend (port 3000) in new terminal
 cd frontend && npm run dev
 ```
 
 ### Creating a New Repository
 
 **Linux/macOS:**
+
 ```bash
 ./setup-repo.sh <repo-name>
 ```
 
 **Windows:**
+
 ```cmd
 setup-repo.bat <repo-name>
 ```
@@ -142,10 +141,13 @@ git push origin main
 
 ### Queue System (queue.js + worker.js)
 
-- Uses **BullMQ** with Redis backend
-- Phase 1: **Sequential builds** (concurrency: 1)
+- Uses **SQLite** for persistent job storage
+- **Poll-based worker**: Checks for new jobs every 2 seconds
+- Phase 1: **Sequential builds** (one at a time)
 - Phase 2 (future): Parallel workers
 - States: `pending` → `running` → `success`/`failed`
+- Database: `<tmpdir>/mini-jenkins/queue.db`
+- Transaction-safe job claiming (prevents race conditions)
 
 ### Atomic Deployment (deploy.service.js)
 
@@ -153,12 +155,16 @@ git push origin main
 // Critical pattern: atomic symlink/junction swap (cross-platform)
 const tmpLink = `${currentLink}.tmp`;
 try {
-  await fs.symlink(releaseDir, tmpLink, os.platform() === 'win32' ? 'junction' : 'dir');
+  await fs.symlink(
+    releaseDir,
+    tmpLink,
+    os.platform() === 'win32' ? 'junction' : 'dir',
+  );
 } catch (err) {
   // Fallback for Windows without permissions
   await fs.writeFile(tmpLink, releaseDir, 'utf-8');
 }
-await fs.rename(tmpLink, currentLink);  // Atomic!
+await fs.rename(tmpLink, currentLink); // Atomic!
 ```
 
 Rollback = just point symlink to previous release
@@ -220,7 +226,9 @@ POST /api/deploy/:id/rollback    # Rollback deployment (TODO)
 
 - **orchestrator/src/app.js**: Express server entry point, route registration
 - **orchestrator/src/core/executor.js**: Build execution logic (clone → checkout → build → artifact)
-- **git/hooks/post-receive**: Webhook trigger template
+- **orchestrator/src/core/queue.js**: SQLite-based job queue (enqueue, getNextJob, completeJob)
+- **orchestrator/src/core/worker.js**: Poll-based worker that processes jobs
+- **git/hooks/post-receive.js**: Node.js-based webhook trigger (cross-platform)
 - **pipeline.json**: Per-project build configuration
 - **architecture.md**: Full system specification
 
@@ -241,21 +249,14 @@ POST /api/deploy/:id/rollback    # Rollback deployment (TODO)
 ### Extend Build Model
 
 1. Edit `orchestrator/src/models/build.model.js`
-2. Update database schema (when implemented - currently in-memory)
+2. Update SQLite schema in `orchestrator/src/core/queue.js` (jobs table)
+3. Add new columns and indexes as needed
 
 ### Add Frontend Page
 
 1. Create in `frontend/src/pages/`
 2. Add route in `frontend/src/App.jsx`
 3. Use `fetch('/api/...')` - Vite proxy handles CORS
-
-## TODOs (Database Implementation)
-
-Currently builds are **in-memory only**. Next step:
-
-- Add SQLite/PostgreSQL integration
-- Implement `build.service.js` persistence
-- Track build history across restarts
 
 ## Philosophy
 

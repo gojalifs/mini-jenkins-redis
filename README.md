@@ -9,7 +9,6 @@ A lightweight, local CI/CD engine built with Node.js and React, designed to run 
 ### Prerequisites
 
 - Node.js >= 18
-- Redis (for BullMQ)
 - Git
 
 ### Installation
@@ -29,9 +28,6 @@ npm install
 **Linux/macOS:**
 
 ```bash
-# Start Redis
-redis-server
-
 # Create a repository
 ./setup-repo.sh my-app
 
@@ -45,9 +41,6 @@ npm run dev
 **Windows:**
 
 ```cmd
-REM Start Redis (via WSL or Redis for Windows)
-wsl redis-server
-
 REM Create a repository
 setup-repo.bat my-app
 
@@ -65,8 +58,8 @@ See [architecture.md](./architecture.md) for detailed system design.
 ### Key Components
 
 - **Local Git Server**: Bare repositories with post-receive hooks
-- **Build Orchestrator**: Node.js API with BullMQ queue
-- **Build Worker**: Isolated workspace execution
+- **Build Orchestrator**: Node.js API with SQLite job queue
+- **Build Worker**: Isolated workspace execution with polling
 - **Artifact Storage**: Immutable build outputs
 - **Atomic Deployment**: Symlink-based releases (junctions on Windows)
 
@@ -76,6 +69,7 @@ See [architecture.md](./architecture.md) for detailed system design.
 - **Node.js hooks**: post-receive implemented in JavaScript (not bash)
 - **Windows symlinks**: Falls back to junctions or file-based references
 - **Path handling**: All paths use `path.join()` for correct separators
+- **SQLite queue**: File-based job queue (no external services required)
 
 ## Project Structure
 
@@ -84,9 +78,10 @@ mini-jenkins/
 ├── orchestrator/          # Node.js backend
 │   └── src/
 │       ├── api/           # HTTP controllers
-│       ├── core/          # Queue, worker, executor
+│       ├── core/          # SQLite queue, worker, executor
 │       ├── services/      # Git, build, deploy logic
-│       └── models/        # Data models
+│       ├── models/        # Data models
+│       └── config/        # Path configuration
 ├── frontend/              # React.js UI
 ├── git/                   # Local git repositories
 │   ├── projects/          # Bare repos
@@ -107,6 +102,7 @@ Contains:
 - `artifacts/` - Build artifacts (.tar.gz)
 - `logs/` - Build logs
 - `deploy/` - Deployment releases
+- `queue.db` - SQLite job queue database
 
 ## Build Identity
 

@@ -1,7 +1,8 @@
 import express from 'express';
 import { handleWebhook } from './api/webhook.controller.js';
 import { getBuilds, getBuildById, retryBuild } from './api/build.controller.js';
-import { buildWorker } from './core/worker.js';
+import { startWorker, stopWorker } from './core/worker.js';
+import { closeDatabase } from './core/queue.js';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -24,11 +25,20 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Orchestrator running on http://localhost:${PORT}`);
   console.log('👷 Build worker started');
+  startWorker(); // Start polling for jobs
 });
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('Shutting down...');
-  await buildWorker.close();
+  stopWorker();
+  closeDatabase();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('Shutting down...');
+  stopWorker();
+  closeDatabase();
   process.exit(0);
 });

@@ -1,42 +1,63 @@
-import { Worker } from 'bullmq';
-import Redis from 'ioredis';
+import { getNextJob, completeJob } from './queue.js';
 import { executeBuild } from './executor.js';
 
-const connection = new Redis({
-  host: 'localhost',
-  port: 6379,
-  maxRetriesPerRequest: null
-});
+let isProcessing = false;
+let workerInterval = null;
 
 /**
- * Build worker - processes build jobs from queue
+ * Build worker - polls for and processes build jobs from SQLite queue
  */
-export const buildWorker = new Worker(
-  'builds',
-  async (job) => {
-    const { buildId, repo, commit, ref } = job.data;
-    
-    console.log(`[Worker] Starting build ${buildId}`);
-    
-    try {
-      await executeBuild({ buildId, repo, commit, ref });
-      console.log(`[Worker] Build ${buildId} completed successfully`);
-      return { success: true };
-    } catch (error) {
-      console.error(`[Worker] Build ${buildId} failed:`, error.message);
-      throw error;
-    }
-  },
-  { 
-    connection,
-    concurrency: 1 // Sequential builds (Phase 1)
+async function processNextJob() {
+  if (isProcessing) return;
+
+  const job = getNextJob();
+  if (!job) return;
+
+  isProcessing = true;
+  const { buildId, repo, commit, ref } = job;
+
+  console.log(`[Worker] Starting build ${buildId}`);
+
+  try {
+    await executeBuild({ buildId, repo, commit, ref });
+    console.log(`[Worker] Build ${buildId} completed successfully`);
+    completeJob(buildId, true);
+  } catch (error) {
+    console.error(`[Worker] Build ${buildId} failed:`, error.message);
+    completeJob(buildId, false, error.message);
+  } finally {
+    isProcessing = false;
+    // Check for next job immediately
+    setImmediate(processNextJob);
   }
-);
+}
 
-buildWorker.on('completed', (job) => {
-  console.log(`Job ${job.id} completed`);
-});
+/**
+ * Start the worker polling loop
+ */
+export function startWorker(pollInterval = 2000) {
+  console.log(`[Worker] Started (polling every ${pollInterval}ms)`);
 
-buildWorker.on('failed', (job, err) => {
-  console.log(`Job ${job.id} failed:`, err.message);
-});
+  // Poll for new jobs
+  workerInterval = setInterval(processNextJob, pollInterval);
+
+  // Process any existing jobs immediately
+  processNextJob();
+}
+
+/**
+ * Stop the worker
+ */
+export function stopWorker() {
+  if (workerInterval) {
+    clearInterval(workerInterval);
+    workerInterval = null;
+    console.log('[Worker] Stopped');
+  }
+}
+
+// Export for compatibility
+export const buildWorker = {
+  start: startWorker,
+  stop: stopWorker,
+};
