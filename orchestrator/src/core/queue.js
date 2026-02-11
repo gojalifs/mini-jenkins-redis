@@ -19,7 +19,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     build_id TEXT UNIQUE NOT NULL,
     repo TEXT NOT NULL,
-    commit TEXT NOT NULL,
+    commit_hash TEXT NOT NULL,
     ref TEXT NOT NULL,
     status TEXT DEFAULT 'pending',
     error TEXT,
@@ -39,18 +39,16 @@ db.exec(`
  */
 export async function enqueueBuild(job) {
   const buildId = `${Date.now()}-${job.commit.substring(0, 7)}`;
-
+  
   const insert = db.prepare(`
-    INSERT INTO jobs (build_id, repo, commit, ref, created_at)
+    INSERT INTO jobs (build_id, repo, commit_hash, ref, created_at)
     VALUES (?, ?, ?, ?, ?)
   `);
-
+  
   insert.run(buildId, job.repo, job.commit, job.ref, Date.now());
-
+  
   return buildId;
-}
-
-/**
+}/**
  * Get next pending job and mark as running
  * @returns {Object|null} job data or null if no pending jobs
  */
@@ -83,8 +81,8 @@ export function getNextJob() {
       id: job.id,
       buildId: job.build_id,
       repo: job.repo,
-      commit: job.commit,
-      ref: job.ref,
+      commit: job.commit_hash,
+      ref: job.ref
     };
   })();
 }
@@ -142,7 +140,7 @@ export function getAllJobs(limit = 50) {
     SELECT 
       build_id as id,
       repo,
-      commit,
+      commit_hash as commit,
       ref,
       status,
       created_at as createdAt,
@@ -167,7 +165,7 @@ export function getJobById(buildId) {
     SELECT 
       build_id as id,
       repo,
-      commit,
+      commit_hash as commit,
       ref,
       status,
       created_at as createdAt,
