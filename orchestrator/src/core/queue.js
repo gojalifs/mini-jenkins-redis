@@ -39,16 +39,16 @@ db.exec(`
  */
 export async function enqueueBuild(job) {
   const buildId = `${Date.now()}-${job.commit.substring(0, 7)}`;
-  
+
   const insert = db.prepare(`
     INSERT INTO jobs (build_id, repo, commit_hash, ref, created_at)
     VALUES (?, ?, ?, ?, ?)
   `);
-  
+
   insert.run(buildId, job.repo, job.commit, job.ref, Date.now());
-  
+
   return buildId;
-}/**
+} /**
  * Get next pending job and mark as running
  * @returns {Object|null} job data or null if no pending jobs
  */
@@ -82,7 +82,7 @@ export function getNextJob() {
       buildId: job.build_id,
       repo: job.repo,
       commit: job.commit_hash,
-      ref: job.ref
+      ref: job.ref,
     };
   })();
 }
